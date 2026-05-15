@@ -10,7 +10,7 @@ let _cachedProfile = null;
 
 /** 获取当前登录用户 */
 async function getSession() {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await _db.auth.getSession();
   return data.session;
 }
 
@@ -32,14 +32,14 @@ async function loadProfile() {
 
 /** 注册新用户（同时自动登录） */
 async function signUp(email, password) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await _db.auth.signUp({ email, password });
   if (error) throw error;
   return data;
 }
 
 /** 登录已有用户 */
 async function signIn(email, password) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await _db.auth.signInWithPassword({ email, password });
   if (error) throw error;
   _cachedProfile = null;
   return data;
@@ -48,7 +48,7 @@ async function signIn(email, password) {
 /** 退出登录 */
 async function logout() {
   _cachedProfile = null;
-  await supabase.auth.signOut();
+  await _db.auth.signOut();
 }
 
 // ====== 兼容旧版接口 ======
