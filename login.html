@@ -98,7 +98,8 @@
 
       try {
         await signIn(email, password);
-        location.href = 'index.html';
+        // 等 Supabase 写入 session 后再跳转
+        setTimeout(() => { location.href = 'index.html'; }, 300);
       } catch (err) {
         showError('login', err.message || '登录失败，请检查邮箱和密码');
       } finally {
@@ -116,7 +117,7 @@
       try {
         await signUp(email, password);
         alert('注册成功！如需验证邮箱请注意查收邮件。');
-        location.href = 'index.html';
+        setTimeout(() => { location.href = 'index.html'; }, 300);
       } catch (err) {
         showError('register', err.message || '注册失败，请重试');
       } finally {

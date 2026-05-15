@@ -1,15 +1,18 @@
--- 修复注册触发器，替换之前的 handle_new_user 函数
--- 在 Supabase SQL Editor 中执行
-
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
+-- 修复触发器：允许 Supabase 后台 (auth.uid() IS NULL) 操作
+CREATE OR REPLACE FUNCTION prevent_sensitive_field_update()
+RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, last_date, daily_count, is_vip, is_admin)
-  VALUES (NEW.id, to_char(now(), 'YYYY-MM-DD'), 0, false, false);
+  IF (OLD.is_vip IS DISTINCT FROM NEW.is_vip) OR
+     (OLD.is_admin IS DISTINCT FROM NEW.is_admin) OR
+     (OLD.vip_expires_at IS DISTINCT FROM NEW.vip_expires_at) THEN
+    -- auth.uid() 为空 = Supabase 后台/服务端操作，放行
+    IF auth.uid() IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND is_admin = true
+    ) THEN
+      RAISE EXCEPTION '无权修改 is_vip / is_admin / vip_expires_at';
+    END IF;
+  END IF;
   RETURN NEW;
 END;
-$$;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

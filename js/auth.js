@@ -55,7 +55,14 @@ async function logout() {
 
 /** 初始化用户 — 页面加载时调用，返回用户状态 */
 async function initUser() {
-  const session = await getSession();
+  // 刚跳转过来的话 session 可能还没写入，重试几次
+  let session;
+  for (let i = 0; i < 3; i++) {
+    session = await getSession();
+    if (session) break;
+    await new Promise(r => setTimeout(r, 200));
+  }
+
   if (!session) {
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
