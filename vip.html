@@ -29,16 +29,154 @@
       <h3>💳 开通方式</h3>
       <div class="price">¥29.9 <span>/ 永久</span></div>
       <p style="color: var(--text-secondary); font-size: 0.85rem;">一次付费，永久使用</p>
+
       <div class="payment-methods">
-        <p>📱 <strong>微信支付：</strong>扫描下方二维码或搜索微信号 <strong>your_wechat</strong></p>
-        <p>💙 <strong>支付宝：</strong>转账至账号 <strong>your_alipay@example.com</strong></p>
+        <div class="payment-method">
+          <h4>📱 微信支付</h4>
+          <div class="qr-code" id="wechat-qr">
+            <div class="qr-placeholder">
+              <p>微信收款码</p>
+              <small>请将你的收款码图片命名为 wechat-qr.png</small>
+              <small>放入项目根目录</small>
+            </div>
+          </div>
+        </div>
+        <div class="payment-method">
+          <h4>💙 支付宝</h4>
+          <div class="qr-code" id="alipay-qr">
+            <div class="qr-placeholder">
+              <p>支付宝收款码</p>
+              <small>请将你的收款码图片命名为 alipay-qr.png</small>
+              <small>放入项目根目录</small>
+            </div>
+          </div>
+        </div>
       </div>
-      <p style="margin-top: 16px; font-size: 0.8rem; color: var(--text-muted);">
-        转账时请备注「文案会员」，客服将在 24 小时内为您开通权限
-      </p>
+
+      <!-- 订单提交 -->
+      <div class="order-form" id="order-form-section">
+        <h4>📋 转账后请在下方提交信息</h4>
+        <p class="order-form-hint">管理员确认到账后将为您开通 VIP 权限</p>
+        <div class="form-group">
+          <label>支付方式</label>
+          <select id="order-method">
+            <option value="wechat">微信支付</option>
+            <option value="alipay">支付宝</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>你的转账流水号 / 昵称（便于核对）</label>
+          <input type="text" id="order-ref" placeholder="输入转账单号或你的微信昵称" maxlength="50" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>你的邮箱（用于绑定会员）</label>
+          <input type="email" id="order-email" placeholder="输入你注册时使用的邮箱" autocomplete="email">
+        </div>
+        <p class="form-error" id="order-error"></p>
+        <button class="btn-submit-order" id="btn-submit-order">
+          <span class="spinner" style="display:none"></span>
+          <span>提交订单</span>
+        </button>
+      </div>
     </div>
+
+    <p class="order-notice">转账时请备注「文案会员」，客服将在 24 小时内为您开通权限</p>
 
     <a href="index.html" class="btn-back">← 返回首页</a>
   </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // 收款码图片加载（把图片放入项目根目录后自动显示）
+    const wechatImg = document.createElement('img');
+    wechatImg.src = 'wechat-qr.png';
+    wechatImg.alt = '微信收款码';
+    wechatImg.onload = () => {
+      const qr = document.getElementById('wechat-qr');
+      qr.querySelector('.qr-placeholder')?.remove();
+      qr.appendChild(wechatImg);
+    };
+
+    const alipayImg = document.createElement('img');
+    alipayImg.src = 'alipay-qr.png';
+    alipayImg.alt = '支付宝收款码';
+    alipayImg.onload = () => {
+      const qr = document.getElementById('alipay-qr');
+      qr.querySelector('.qr-placeholder')?.remove();
+      qr.appendChild(alipayImg);
+    };
+
+    // Toast
+    function showToast(message, success = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast' + (success ? ' success' : '');
+      toast.classList.add('show');
+      clearTimeout(toast._timeout);
+      toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // 提交订单
+    document.getElementById('btn-submit-order').addEventListener('click', async () => {
+      const method = document.getElementById('order-method').value;
+      const ref = document.getElementById('order-ref').value.trim();
+      const email = document.getElementById('order-email').value.trim();
+      const errorEl = document.getElementById('order-error');
+      const btn = document.getElementById('btn-submit-order');
+      const spinner = btn.querySelector('.spinner');
+      const btnText = btn.querySelector('span:last-child');
+
+      if (!ref) {
+        errorEl.textContent = '请输入转账流水号或昵称';
+        errorEl.classList.add('show');
+        return;
+      }
+      if (!email) {
+        errorEl.textContent = '请输入你的邮箱';
+        errorEl.classList.add('show');
+        return;
+      }
+      errorEl.classList.remove('show');
+
+      btn.disabled = true;
+      spinner.style.display = 'inline-block';
+      btnText.textContent = '提交中...';
+
+      try {
+        // 检查是否已登录，关联用户 ID
+        const session = await getSession();
+        const orderData = {
+          amount: 29.9,
+          payment_method: method,
+          transaction_ref: ref,
+          user_email: email,
+          status: 'pending',
+        };
+        if (session) {
+          orderData.user_id = session.user.id;
+        }
+
+        const { error } = await supabase
+          .from('orders')
+          .insert(orderData);
+
+        if (error) throw error;
+        showToast('订单已提交，管理员确认后会自动开通', true);
+        document.getElementById('order-ref').value = '';
+        document.getElementById('order-email').value = '';
+      } catch (err) {
+        errorEl.textContent = err.message || '提交失败，请重试';
+        errorEl.classList.add('show');
+      } finally {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+        btnText.textContent = '提交订单';
+      }
+    });
+  </script>
 </body>
 </html>

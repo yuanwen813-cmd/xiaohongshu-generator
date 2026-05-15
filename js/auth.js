@@ -1,86 +1,172 @@
 /**
- * 用户状态模块
- * 当前用 localStorage 模拟，后续替换为真实后端 API 只需修改此文件
+ * 用户认证模块 — 基于 Supabase Auth + profiles 表
  *
- * 数据结构: { loggedIn: boolean, isVip: boolean, dailyCount: number, lastDate: string }
+ * profiles 行在用户注册时由数据库触发器自动创建
+ * 对外暴露的函数签名保持与旧版 localStorage 版本兼容
  */
 
-const STORAGE_KEY = 'xhsauth';
+// ====== 缓存当前用户 profile，避免重复请求 ======
+let _cachedProfile = null;
 
-function getUser() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
-    return JSON.parse(raw);
-  } catch {
+/** 获取当前登录用户 */
+async function getSession() {
+  const { data } = await supabase.auth.getSession();
+  return data.session;
+}
+
+/** 从 profiles 表加载当前用户数据 */
+async function loadProfile() {
+  const session = await getSession();
+  if (!session) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+
+  if (error || !data) return null;
+  _cachedProfile = data;
+  return data;
+}
+
+/** 注册新用户（同时自动登录） */
+async function signUp(email, password) {
+  const { data, error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+/** 登录已有用户 */
+async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  _cachedProfile = null;
+  return data;
+}
+
+/** 退出登录 */
+async function logout() {
+  _cachedProfile = null;
+  await supabase.auth.signOut();
+}
+
+// ====== 兼容旧版接口 ======
+
+/** 初始化用户 — 页面加载时调用，返回用户状态 */
+async function initUser() {
+  const session = await getSession();
+  if (!session) {
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
+
+  const profile = await loadProfile();
+  if (!profile) {
+    return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
+  }
+
+  // 跨天重置次数
+  await resetDailyIfNeeded(profile);
+
+  return {
+    loggedIn: true,
+    isVip: profile.is_vip,
+    dailyCount: profile.daily_count,
+    lastDate: profile.last_date,
+  };
 }
 
-function saveUser(user) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+/** 获取缓存的用户信息 */
+function getUser() {
+  return _cachedProfile
+    ? {
+        loggedIn: true,
+        isVip: _cachedProfile.is_vip,
+        dailyCount: _cachedProfile.daily_count,
+        lastDate: _cachedProfile.last_date,
+      }
+    : { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
 }
 
-/** 重置每日次数（跨天自动调用） */
-function resetDailyIfNeeded() {
-  const user = getUser();
+/** 每天重置计数（跨天自动调用） */
+async function resetDailyIfNeeded(profile) {
   const today = new Date().toDateString();
-  if (user.lastDate !== today) {
-    user.dailyCount = 0;
-    user.lastDate = today;
-    saveUser(user);
+  if (profile && profile.last_date !== today) {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ daily_count: 0, last_date: today })
+      .eq('id', profile.id);
+    if (!error) {
+      profile.daily_count = 0;
+      profile.last_date = today;
+      _cachedProfile = profile;
+    }
   }
 }
 
-/** 自动创建游客身份，返回当前用户状态 */
-function initUser() {
-  resetDailyIfNeeded();
-  let user = getUser();
-  if (!user.loggedIn) {
-    user = { loggedIn: true, isVip: false, dailyCount: 0, lastDate: new Date().toDateString() };
-    saveUser(user);
-  }
-  return user;
-}
-
-/** 会员登录 */
-function loginAsVip() {
-  const user = getUser();
-  user.loggedIn = true;
-  user.isVip = true;
-  saveUser(user);
-  return user;
-}
-
-/** 退出登录（回到游客模式） */
-function logout() {
-  const today = new Date().toDateString();
-  saveUser({ loggedIn: true, isVip: false, dailyCount: 0, lastDate: today });
-}
-
-/** 今日剩余生成次数，会员返回 Infinity */
+/** 今日剩余生成次数 */
 function remainingCount() {
-  const user = getUser();
-  if (user.isVip) return Infinity;
-  return Math.max(0, 3 - user.dailyCount);
+  if (!_cachedProfile) return 3;
+  if (_cachedProfile.is_vip) return Infinity;
+  return Math.max(0, 3 - _cachedProfile.daily_count);
 }
 
 /** 是否还能生成 */
 function canGenerate() {
-  const user = getUser();
-  if (user.isVip) return true;
-  return user.dailyCount < 3;
+  if (!_cachedProfile) {
+    // 未登录用户也允许生成（游客模式）
+    return (_guestDailyCount || 0) < 3;
+  }
+  if (_cachedProfile.is_vip) return true;
+  return _cachedProfile.daily_count < 3;
 }
 
-/** 消耗一次生成次数（游客调用） */
-function useOne() {
-  const user = getUser();
-  if (user.isVip) return;
-  user.dailyCount += 1;
-  saveUser(user);
+/** 消耗一次生成次数 */
+async function useOne() {
+  if (!_cachedProfile || _cachedProfile.is_vip) return;
+  const newCount = _cachedProfile.daily_count + 1;
+  const { error } = await supabase
+    .from('profiles')
+    .update({ daily_count: newCount })
+    .eq('id', _cachedProfile.id);
+  if (!error) {
+    _cachedProfile.daily_count = newCount;
+  }
 }
 
-// ====== 预留：未来替换为真实后端 API 的接口签名 ======
-// async function fetchUserFromServer() { ... }
-// async function syncCountToServer() { ... }
-// async function verifyMembership() { ... }
+// ====== 游客模式（未登录用户的本地计数） ======
+let _guestDailyCount = 0;
+const GUEST_KEY = 'xhs_guest';
+
+function getGuestState() {
+  try {
+    const raw = localStorage.getItem(GUEST_KEY);
+    if (!raw) return { count: 0, date: '' };
+    const state = JSON.parse(raw);
+    const today = new Date().toDateString();
+    if (state.date !== today) return { count: 0, date: today };
+    return state;
+  } catch {
+    return { count: 0, date: '' };
+  }
+}
+
+function saveGuestState(state) {
+  localStorage.setItem(GUEST_KEY, JSON.stringify(state));
+}
+
+function initGuest() {
+  const state = getGuestState();
+  _guestDailyCount = state.count;
+}
+
+function canGuestGenerate() {
+  return _guestDailyCount < 3;
+}
+
+function guestUseOne() {
+  const state = getGuestState();
+  state.count += 1;
+  _guestDailyCount = state.count;
+  saveGuestState(state);
+}

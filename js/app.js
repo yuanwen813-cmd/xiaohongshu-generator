@@ -2,9 +2,14 @@
  * 应用入口 — DOM 事件绑定与模块编排
  */
 
-document.addEventListener('DOMContentLoaded', () => {
-  const user = initUser();
+document.addEventListener('DOMContentLoaded', async () => {
+  // 初始化游客本地状态
+  initGuest();
+
+  // 尝试加载登录用户
+  const user = await initUser();
   const isVip = user.isVip;
+  const isLoggedIn = user.loggedIn;
 
   // ====== DOM 引用 ======
   const adTop = document.getElementById('ad-top');
@@ -28,36 +33,60 @@ document.addEventListener('DOMContentLoaded', () => {
   renderStatusBar();
 
   function renderStatusBar() {
-    const u = getUser();
-    if (u.isVip) {
-      statusArea.innerHTML = `
-        <div class="status-left">
-          <span class="vip-badge">VIP</span>
-          <span style="font-size:0.8rem;color:var(--text-secondary)">无限次数 · 高级模板 · 无广告</span>
-        </div>
-        <button class="btn-logout" id="btn-logout">退出</button>
-      `;
-      document.getElementById('btn-logout').addEventListener('click', () => {
-        logout();
-        location.reload();
-      });
-    } else {
-      const rem = remainingCount();
+    if (!isLoggedIn) {
+      // 游客模式
+      const rem = Math.max(0, 3 - _guestDailyCount);
       statusArea.innerHTML = `
         <div class="status-left">
           <span class="guest-badge">游客</span>
           <span class="count-text">今日剩余 <span class="count-num">${rem}</span>/3 次</span>
         </div>
         <div>
+          <button class="btn-upgrade" id="btn-login-link">登录</button>
+          <button class="btn-login" id="btn-register-link">注册</button>
+        </div>
+      `;
+      document.getElementById('btn-login-link').addEventListener('click', () => {
+        location.href = 'login.html';
+      });
+      document.getElementById('btn-register-link').addEventListener('click', () => {
+        location.href = 'login.html';
+      });
+      return;
+    }
+
+    if (isVip) {
+      statusArea.innerHTML = `
+        <div class="status-left">
+          <span class="vip-badge">VIP</span>
+          <span style="font-size:0.8rem;color:var(--text-secondary)">无限次数 · 高级模板 · 无广告</span>
+        </div>
+        <div>
+          <a href="dashboard.html" style="font-size:0.75rem;color:var(--text-muted);text-decoration:none;margin-right:12px">用户中心</a>
+          <button class="btn-logout" id="btn-logout">退出</button>
+        </div>
+      `;
+      document.getElementById('btn-logout').addEventListener('click', async () => {
+        await logout();
+        location.reload();
+      });
+    } else {
+      const rem = remainingCount();
+      statusArea.innerHTML = `
+        <div class="status-left">
+          <span class="guest-badge">已登录</span>
+          <span class="count-text">今日剩余 <span class="count-num">${rem === Infinity ? '∞' : rem}</span>/3 次</span>
+        </div>
+        <div>
           <button class="btn-upgrade" id="btn-upgrade">升级会员</button>
-          <button class="btn-login" id="btn-vip-login">会员登录</button>
+          <button class="btn-logout" id="btn-logout">退出</button>
         </div>
       `;
       document.getElementById('btn-upgrade').addEventListener('click', () => {
         location.href = 'vip.html';
       });
-      document.getElementById('btn-vip-login').addEventListener('click', () => {
-        loginAsVip();
+      document.getElementById('btn-logout').addEventListener('click', async () => {
+        await logout();
         location.reload();
       });
     }
@@ -78,19 +107,27 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (!canGenerate()) {
-      showToast('今日次数已用完，请升级会员');
-      return;
+    // 检查生成次数
+    if (isLoggedIn) {
+      if (!canGenerate()) {
+        showToast('今日次数已用完，请升级会员');
+        return;
+      }
+    } else {
+      if (!canGuestGenerate()) {
+        showToast('今日次数已用完，请登录或升级会员');
+        return;
+      }
     }
 
     // 进入加载状态
     setLoading(true);
 
-    // 模拟生成延迟（0.6~1.2s），让加载动画可见
+    // 模拟生成延迟
     const delay = 600 + Math.random() * 600;
-    const level = getUser().isVip ? 'premium' : 'basic';
+    const level = isVip ? 'premium' : 'basic';
 
-    setTimeout(() => {
+    setTimeout(async () => {
       const result = generate(keyword, level);
 
       // 渲染结果
@@ -101,8 +138,12 @@ document.addEventListener('DOMContentLoaded', () => {
         .map(tag => `<span class="result-tag">#${tag}</span>`)
         .join('');
 
-      // 消耗次数 + 刷新状态栏
-      useOne();
+      // 消耗次数
+      if (isLoggedIn) {
+        await useOne();
+      } else {
+        guestUseOne();
+      }
       renderStatusBar();
 
       // 退出加载状态
@@ -132,8 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
   inputKeyword.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') btnGenerate.click();
   });
-
-  // ====== 初始化完成 ======
 });
 
 // ====== 工具函数 ======
@@ -174,7 +213,6 @@ function showToast(message, success = false) {
   }, 2000);
 }
 
-/** 输入框抖动反馈 */
 function shake(el) {
   el.style.transition = 'transform 0.1s';
   el.style.transform = 'translateX(-4px)';

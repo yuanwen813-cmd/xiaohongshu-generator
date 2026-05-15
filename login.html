@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>登录/注册 - 小红书爆款文案生成器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <a href="index.html" class="auth-back">← 返回首页</a>
+
+      <div class="auth-header">
+        <div class="brand-icon">📕</div>
+        <h2>登录 / 注册</h2>
+        <p>注册即享每日 3 次免费生成</p>
+      </div>
+
+      <!-- Tab 切换 -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">登录</button>
+        <button class="auth-tab" data-tab="register">注册</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form class="auth-form active" id="form-login" autocomplete="off">
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" name="email" placeholder="输入邮箱" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input type="password" name="password" placeholder="输入密码" required autocomplete="current-password">
+        </div>
+        <div class="form-error" id="login-error"></div>
+        <button type="submit" class="auth-submit" id="btn-login">
+          <span class="spinner" style="display:none"></span>
+          <span>登录</span>
+        </button>
+      </form>
+
+      <!-- 注册表单 -->
+      <form class="auth-form" id="form-register" autocomplete="off">
+        <div class="form-group">
+          <label>邮箱</label>
+          <input type="email" name="email" placeholder="输入邮箱" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label>密码</label>
+          <input type="password" name="password" placeholder="至少 6 位密码" minlength="6" required autocomplete="new-password">
+        </div>
+        <div class="form-error" id="register-error"></div>
+        <button type="submit" class="auth-submit" id="btn-register">
+          <span class="spinner" style="display:none"></span>
+          <span>注册</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // Tab 切换
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+        document.getElementById('form-' + target).classList.add('active');
+      });
+    });
+
+    function setLoading(form, loading) {
+      const btn = form.querySelector('button');
+      const spinner = btn.querySelector('.spinner');
+      const text = btn.querySelector('span:last-child');
+      btn.disabled = loading;
+      spinner.style.display = loading ? 'inline-block' : 'none';
+    }
+
+    function showError(formId, message) {
+      const el = document.getElementById(formId + '-error');
+      el.textContent = message;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 4000);
+    }
+
+    // 登录
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setLoading(e.target, true);
+      const email = e.target.email.value.trim();
+      const password = e.target.password.value;
+
+      try {
+        await signIn(email, password);
+        location.href = 'index.html';
+      } catch (err) {
+        showError('login', err.message || '登录失败，请检查邮箱和密码');
+      } finally {
+        setLoading(e.target, false);
+      }
+    });
+
+    // 注册
+    document.getElementById('form-register').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setLoading(e.target, true);
+      const email = e.target.email.value.trim();
+      const password = e.target.password.value;
+
+      try {
+        await signUp(email, password);
+        alert('注册成功！如需验证邮箱请注意查收邮件。');
+        location.href = 'index.html';
+      } catch (err) {
+        showError('register', err.message || '注册失败，请重试');
+      } finally {
+        setLoading(e.target, false);
+      }
+    });
+  </script>
+</body>
+</html>

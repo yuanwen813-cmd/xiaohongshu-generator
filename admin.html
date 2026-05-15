@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>管理后台 - 小红书爆款文案生成器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="admin-container">
+    <div class="admin-header">
+      <div class="brand-icon">🛡️</div>
+      <h2>管理后台</h2>
+      <p id="admin-email"></p>
+    </div>
+
+    <!-- Tab -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-tab="pending">待审核</button>
+      <button class="admin-tab" data-tab="confirmed">已开通</button>
+      <button class="admin-tab" data-tab="rejected">已退回</button>
+    </div>
+
+    <!-- 订单列表 -->
+    <div id="admin-order-list"></div>
+
+    <a href="index.html" class="auth-back">← 返回首页</a>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    let currentTab = 'pending';
+
+    function showToast(message, success = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast' + (success ? ' success' : '');
+      toast.classList.add('show');
+      clearTimeout(toast._timeout);
+      toast._timeout = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    async function initAdmin() {
+      // 1. 检查登录
+      const session = await getSession();
+      if (!session) {
+        location.href = 'login.html';
+        return;
+      }
+
+      // 2. 检查是否管理员
+      const profile = await loadProfile();
+      if (!profile || !profile.is_admin) {
+        document.body.innerHTML = '<div style="text-align:center;padding:100px 20px"><h2>403</h2><p>你没有管理员权限</p><a href="index.html">返回首页</a></div>';
+        return;
+      }
+
+      document.getElementById('admin-email').textContent = session.user.email;
+
+      // 3. 加载订单
+      loadOrders();
+
+      // Tab 切换
+      document.querySelectorAll('.admin-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          currentTab = tab.dataset.tab;
+          document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          loadOrders();
+        });
+      });
+    }
+
+    async function loadOrders() {
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('status', currentTab)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const list = document.getElementById('admin-order-list');
+      if (error) {
+        list.innerHTML = '<p class="admin-empty">加载失败: ' + error.message + '</p>';
+        return;
+      }
+      if (!orders || orders.length === 0) {
+        list.innerHTML = '<p class="admin-empty">暂无数据</p>';
+        return;
+      }
+
+      list.innerHTML = orders.map(o => `
+        <div class="admin-order-card">
+          <div class="admin-order-top">
+            <span class="admin-order-id">#${o.id}</span>
+            <span class="admin-order-status status-${o.status}">${
+              { pending: '待审核', confirmed: '已开通', rejected: '已退回' }[o.status]
+            }</span>
+          </div>
+          <div class="admin-order-info">
+            <div>📧 ${o.user_email || '未提供'}</div>
+            <div>💳 ${o.payment_method === 'wechat' ? '微信' : '支付宝'} · ¥${o.amount}</div>
+            <div>🔢 流水号/昵称: ${o.transaction_ref || '未填写'}</div>
+            <div>🕐 ${new Date(o.created_at).toLocaleString('zh-CN')}</div>
+            ${o.confirmed_at ? `<div>✅ 确认时间: ${new Date(o.confirmed_at).toLocaleString('zh-CN')}</div>` : ''}
+            ${o.admin_note ? `<div>📝 备注: ${o.admin_note}</div>` : ''}
+          </div>
+          ${o.status === 'pending' ? `
+            <div class="admin-order-actions">
+              <button class="btn-confirm" data-id="${o.id}">✔ 确认开通</button>
+              <button class="btn-reject" data-id="${o.id}">✘ 退回</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      // 绑定按钮
+      list.querySelectorAll('.btn-confirm').forEach(btn => {
+        btn.addEventListener('click', () => handleOrder(btn.dataset.id, 'confirmed'));
+      });
+      list.querySelectorAll('.btn-reject').forEach(btn => {
+        btn.addEventListener('click', () => handleOrder(btn.dataset.id, 'rejected'));
+      });
+    }
+
+    async function handleOrder(orderId, status) {
+      if (status === 'confirmed' && !confirm('确认收到该用户的付款，为其开通 VIP？')) return;
+
+      // 先查订单获取 user_email
+      const { data: order } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+
+      // 更新订单状态
+      const updates = {
+        status: status,
+        confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
+      };
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', orderId);
+
+      if (orderError) {
+        showToast('操作失败: ' + orderError.message);
+        return;
+      }
+
+      // 如果确认，通过 RPC 升级用户为 VIP
+      if (status === 'confirmed' && order && order.user_id) {
+        await supabase
+          .from('profiles')
+          .update({ is_vip: true, vip_expires_at: null })
+          .eq('id', order.user_id);
+      }
+
+      showToast(status === 'confirmed' ? '已开通 VIP' : '已退回', true);
+      loadOrders();
+    }
+
+    initAdmin();
+  </script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>用户中心 - 小红书爆款文案生成器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    <a href="index.html" class="auth-back">← 返回首页</a>
+
+    <div class="dashboard-header">
+      <div class="brand-icon">👤</div>
+      <h2>用户中心</h2>
+      <p id="dash-email">加载中...</p>
+    </div>
+
+    <!-- VIP 状态 -->
+    <div class="dash-card" id="dash-vip-card">
+      <h3>💎 会员状态</h3>
+      <div id="dash-vip-status">加载中...</div>
+    </div>
+
+    <!-- 订单记录 -->
+    <div class="dash-card">
+      <h3>📋 我的订单</h3>
+      <div id="dash-orders">加载中...</div>
+    </div>
+
+    <!-- 当前登录会话 -->
+    <div class="dash-card">
+      <button class="auth-submit" id="btn-logout">退出登录</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    async function initDashboard() {
+      const session = await getSession();
+      if (!session) {
+        location.href = 'login.html';
+        return;
+      }
+
+      // 显示邮箱
+      document.getElementById('dash-email').textContent = session.user.email;
+
+      // 加载 VIP 状态
+      const profile = await loadProfile();
+      const vipDiv = document.getElementById('dash-vip-status');
+      if (profile && profile.is_vip) {
+        vipDiv.innerHTML = `
+          <div class="vip-status-badge vip-active">👑 永久 VIP 会员</div>
+          <p style="margin-top:8px;color:var(--text-secondary)">无限次数 · 高级模板 · 无广告</p>
+        `;
+      } else {
+        vipDiv.innerHTML = `
+          <div class="vip-status-badge vip-inactive">游客</div>
+          <p style="margin-top:8px;color:var(--text-secondary)">今日剩余 ${profile ? Math.max(0, 3 - profile.daily_count) : 3}/3 次</p>
+          <a href="vip.html" class="btn-upgrade-dash">💎 升级 VIP</a>
+        `;
+      }
+
+      // 加载订单
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      const ordersDiv = document.getElementById('dash-orders');
+      if (error || !orders || orders.length === 0) {
+        ordersDiv.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px">暂无订单记录</p>';
+      } else {
+        ordersDiv.innerHTML = orders.map(o => `
+          <div class="order-item">
+            <div class="order-header">
+              <span class="order-id">#${o.id}</span>
+              <span class="order-status order-${o.status}">${
+                { pending: '审核中', confirmed: '已开通', rejected: '已退回' }[o.status] || o.status
+              }</span>
+            </div>
+            <div class="order-detail">
+              <span>${o.payment_method === 'wechat' ? '微信' : '支付宝'} · ¥${o.amount}</span>
+              <span style="color:var(--text-muted)">${new Date(o.created_at).toLocaleString('zh-CN')}</span>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 退出按钮
+      document.getElementById('btn-logout').addEventListener('click', async () => {
+        await logout();
+        location.href = 'index.html';
+      });
+    }
+
+    initDashboard();
+  </script>
+</body>
+</html>
