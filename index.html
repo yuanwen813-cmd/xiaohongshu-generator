@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>小红书爆款文案生成器</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 顶部广告位 -->
+    <div id="ad-top"></div>
+
+    <!-- 主内容 -->
+    <main class="main-content">
+      <!-- 品牌区 -->
+      <div class="brand">
+        <div class="brand-icon">📕</div>
+        <h1>小红书爆款文案生成器</h1>
+        <p class="brand-subtitle">输入关键词，秒出爆款标题 + 正文 + 标签</p>
+      </div>
+
+      <!-- 输入区 -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <input type="text" id="input-keyword" placeholder="输入产品/主题关键词，如：防晒霜" maxlength="30" autocomplete="off">
+          <span class="char-count"><span id="char-count-num">0</span>/30</span>
+        </div>
+        <button class="btn-generate" id="btn-generate">
+          <span class="spinner" id="btn-spinner" style="display:none"></span>
+          <span id="btn-text">🔥 生成文案</span>
+        </button>
+      </div>
+
+      <!-- 用户状态栏 -->
+      <div class="user-status" id="status-area"></div>
+
+      <!-- 结果区 -->
+      <div class="result-section" id="result-section">
+        <div class="result-card">
+          <div>
+            <div class="result-title-label">📌 标题</div>
+            <div class="result-title" id="result-title"></div>
+          </div>
+          <div>
+            <div class="result-body-label">📝 正文</div>
+            <div class="result-body" id="result-body"></div>
+          </div>
+          <div>
+            <div class="result-body-label">🏷️ 标签</div>
+            <div class="result-tags" id="result-tags"></div>
+          </div>
+        </div>
+        <div class="copy-actions">
+          <button class="btn-copy" id="btn-copy-title">📋 复制标题</button>
+          <button class="btn-copy" id="btn-copy-body">📋 复制正文</button>
+          <button class="btn-copy" id="btn-copy-all">📋 一键复制全部</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- 底部 -->
+    <div id="ad-bottom"></div>
+    <div class="footer-bar">
+      <a href="vip.html">💎 升级会员</a>
+      <span>|</span>
+      <span>© 2026 文案生成器</span>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- JS 模块 -->
+  <script src="js/templates.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ads.js"></script>
+  <script src="js/generator.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
