@@ -7,22 +7,30 @@
 
 // ====== 缓存当前用户 profile，避免重复请求 ======
 let _cachedProfile = null;
+let _currentUser = null;
 
-/** 获取当前登录用户 */
+/** 获取当前登录用户（向 Supabase 验证 token） */
 async function getSession() {
-  const { data } = await _db.auth.getSession();
-  return data.session;
+  const { data: { session } } = await _db.auth.getSession();
+  return session;
+}
+
+async function getCurrentUser() {
+  const { data: { user }, error } = await _db.auth.getUser();
+  if (error || !user) return null;
+  _currentUser = user;
+  return user;
 }
 
 /** 从 profiles 表加载当前用户数据 */
 async function loadProfile() {
-  const session = await getSession();
-  if (!session) return null;
+  const user = _currentUser || await getCurrentUser();
+  if (!user) return null;
 
   const { data, error } = await _db
     .from('profiles')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single();
 
   if (error || !data) return null;
@@ -30,7 +38,7 @@ async function loadProfile() {
   return data;
 }
 
-/** 注册新用户（同时自动登录） */
+/** 注册新用户 */
 async function signUp(email, password) {
   const { data, error } = await _db.auth.signUp({ email, password });
   if (error) throw error;
@@ -42,12 +50,14 @@ async function signIn(email, password) {
   const { data, error } = await _db.auth.signInWithPassword({ email, password });
   if (error) throw error;
   _cachedProfile = null;
+  _currentUser = null;
   return data;
 }
 
 /** 退出登录 */
 async function logout() {
   _cachedProfile = null;
+  _currentUser = null;
   await _db.auth.signOut();
 }
 
@@ -55,15 +65,9 @@ async function logout() {
 
 /** 初始化用户 — 页面加载时调用，返回用户状态 */
 async function initUser() {
-  // 刚跳转过来的话 session 可能还没写入，重试几次
-  let session;
-  for (let i = 0; i < 3; i++) {
-    session = await getSession();
-    if (session) break;
-    await new Promise(r => setTimeout(r, 200));
-  }
-
-  if (!session) {
+  // 用 getUser() 向服务器验证，比 getSession() 更可靠
+  const user = await getCurrentUser();
+  if (!user) {
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
 
@@ -95,7 +99,7 @@ function getUser() {
     : { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
 }
 
-/** 每天重置计数（跨天自动调用） */
+/** 每天重置计数 */
 async function resetDailyIfNeeded(profile) {
   const today = new Date().toDateString();
   if (profile && profile.last_date !== today) {
@@ -121,7 +125,6 @@ function remainingCount() {
 /** 是否还能生成 */
 function canGenerate() {
   if (!_cachedProfile) {
-    // 未登录用户也允许生成（游客模式）
     return (_guestDailyCount || 0) < 3;
   }
   if (_cachedProfile.is_vip) return true;
@@ -141,7 +144,7 @@ async function useOne() {
   }
 }
 
-// ====== 游客模式（未登录用户的本地计数） ======
+// ====== 游客模式 ======
 let _guestDailyCount = 0;
 const GUEST_KEY = 'xhs_guest';
 
