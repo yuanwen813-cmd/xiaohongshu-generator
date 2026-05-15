@@ -65,22 +65,19 @@ async function logout() {
 
 /** 初始化用户 — 页面加载时调用，返回用户状态 */
 async function initUser() {
-  // 先试 getSession（快），再试 getUser（准）
-  let session = await getSession();
+  // 先确认登录会话，再验证 token，最后加载 profile
+  const session = await getSession();
   if (!session) {
-    console.log('initUser: no session found');
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
 
   const user = await getCurrentUser();
   if (!user) {
-    console.log('initUser: session exists but getUser() failed — token may be invalid');
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
 
   const profile = await loadProfile();
   if (!profile) {
-    console.log('initUser: user exists but no profile found');
     return { loggedIn: false, isVip: false, dailyCount: 0, lastDate: '' };
   }
 
