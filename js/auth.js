@@ -19,7 +19,7 @@ async function loadProfile() {
   const session = await getSession();
   if (!session) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await _db
     .from('profiles')
     .select('*')
     .eq('id', session.user.id)
@@ -92,7 +92,7 @@ function getUser() {
 async function resetDailyIfNeeded(profile) {
   const today = new Date().toDateString();
   if (profile && profile.last_date !== today) {
-    const { error } = await supabase
+    const { error } = await _db
       .from('profiles')
       .update({ daily_count: 0, last_date: today })
       .eq('id', profile.id);
@@ -125,7 +125,7 @@ function canGenerate() {
 async function useOne() {
   if (!_cachedProfile || _cachedProfile.is_vip) return;
   const newCount = _cachedProfile.daily_count + 1;
-  const { error } = await supabase
+  const { error } = await _db
     .from('profiles')
     .update({ daily_count: newCount })
     .eq('id', _cachedProfile.id);

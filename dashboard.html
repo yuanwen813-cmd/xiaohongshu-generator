@@ -34,7 +34,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/_db.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="js/_db.js"></script>
   <script src="js/auth.js"></script>
   <script>
@@ -65,7 +65,7 @@
       }
 
       // 加载订单
-      const { data: orders, error } = await supabase
+      const { data: orders, error } = await _db
         .from('orders')
         .select('*')
         .eq('user_id', session.user.id)

@@ -29,7 +29,7 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/_db.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="js/_db.js"></script>
   <script src="js/auth.js"></script>
   <script>
@@ -76,7 +76,7 @@
     }
 
     async function loadOrders() {
-      const { data: orders, error } = await supabase
+      const { data: orders, error } = await _db
         .from('orders')
         .select('*')
         .eq('status', currentTab)
@@ -131,7 +131,7 @@
       if (status === 'confirmed' && !confirm('确认收到该用户的付款，为其开通 VIP？')) return;
 
       // 先查订单获取 user_email
-      const { data: order } = await supabase
+      const { data: order } = await _db
         .from('orders')
         .select('*')
         .eq('id', orderId)
@@ -142,7 +142,7 @@
         status: status,
         confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
       };
-      const { error: orderError } = await supabase
+      const { error: orderError } = await _db
         .from('orders')
         .update(updates)
         .eq('id', orderId);
@@ -154,7 +154,7 @@
 
       // 如果确认，通过 RPC 升级用户为 VIP
       if (status === 'confirmed' && order && order.user_id) {
-        await supabase
+        await _db
           .from('profiles')
           .update({ is_vip: true, vip_expires_at: null })
           .eq('id', order.user_id);
