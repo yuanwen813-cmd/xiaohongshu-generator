@@ -92,6 +92,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // ====== 风格选择按钮 ======
+  document.querySelectorAll('.style-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
   // ====== 输入框字数统计 ======
   inputKeyword.addEventListener('input', () => {
     const len = inputKeyword.value.length;
@@ -120,38 +128,53 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
+    // 获取风格选择
+    const styleEl = document.querySelector('.style-btn.active');
+    const style = styleEl ? styleEl.dataset.style : '';
+
     // 进入加载状态
     setLoading(true);
 
-    // 模拟生成延迟
-    const delay = 600 + Math.random() * 600;
-    const level = isVip ? 'premium' : 'basic';
-
-    setTimeout(async () => {
-      const result = generate(keyword, level);
-
-      // 渲染结果
-      resultSection.classList.add('visible');
-      resultTitle.textContent = result.title;
-      resultBody.textContent = result.body;
-      resultTags.innerHTML = result.tags
-        .map(tag => `<span class="result-tag">#${tag}</span>`)
-        .join('');
-
-      // 消耗次数
-      if (isLoggedIn) {
-        await useOne();
-      } else {
-        guestUseOne();
+    let result;
+    if (isVip) {
+      // VIP 用户：调用 AI
+      try {
+        result = await aiGenerate(keyword, style);
+      } catch (err) {
+        console.warn('AI generate failed, fallback to template:', err.message);
+        const delay = 300 + Math.random() * 400;
+        await new Promise(r => setTimeout(r, delay));
+        result = generate(keyword, 'premium');
+        showToast('AI 繁忙，已为你使用备用模板生成');
       }
-      renderStatusBar();
+    } else {
+      // 普通用户：模板生成
+      const delay = 400 + Math.random() * 500;
+      await new Promise(r => setTimeout(r, delay));
+      result = generate(keyword, 'basic');
+    }
 
-      // 退出加载状态
-      setLoading(false);
+    // 渲染结果
+    resultSection.classList.add('visible');
+    resultTitle.textContent = result.title;
+    resultBody.textContent = result.body;
+    resultTags.innerHTML = result.tags
+      .map(tag => `<span class="result-tag">#${tag}</span>`)
+      .join('');
 
-      // 滚动到结果区
-      resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, delay);
+    // 消耗次数
+    if (isLoggedIn) {
+      await useOne();
+    } else {
+      guestUseOne();
+    }
+    renderStatusBar();
+
+    // 退出加载状态
+    setLoading(false);
+
+    // 滚动到结果区
+    resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   // ====== 复制按钮 ======

@@ -1,6 +1,7 @@
 /**
  * 文案生成引擎
- * 当前用模板随机拼装实现，后续接入 AI 时替换 generate() 内部逻辑即可
+ * 普通用户：模板随机拼装
+ * VIP 用户：调用 /api/generate（DeepSeek AI）
  */
 
 /** 从数组中随机取一项 */
@@ -20,10 +21,7 @@ function fillTemplate(template, keyword) {
 }
 
 /**
- * 生成文案
- * @param {string} keyword - 用户输入的关键词
- * @param {'basic'|'premium'} level - 模板等级
- * @returns {{ title: string, body: string, tags: string[] }}
+ * 模板生成（普通用户 / AI fallback 用）
  */
 function generate(keyword, level) {
   const title = fillTemplate(pick(TITLE_TEMPLATES[level]), keyword);
@@ -32,21 +30,42 @@ function generate(keyword, level) {
   return { title, body, tags };
 }
 
-// ====== 预留：未来接入 AI 的接口 ======
 /**
- * aiGenerate(keyword)
- * 后续接入 Claude API / OpenAI 等，返回 { title, body, tags }
- *
- * async function aiGenerate(keyword) {
- *   const response = await fetch('/api/generate', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({ keyword })
- *   });
- *   return response.json();
- * }
+ * AI 生成（VIP 用户）
+ * @param {string} keyword
+ * @param {string} [style] - 可选风格，不传则随机
+ * @returns {Promise<{ title: string, body: string, tags: string[] }>}
  */
-async function aiGenerate(keyword) {
-  // TODO: 接入 AI API
-  throw new Error('AI 接口尚未接入');
+async function aiGenerate(keyword, style) {
+  const session = await _db.auth.getSession();
+  const token = session?.data?.session?.access_token;
+  if (!token) throw new Error('登录已过期');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ keyword, style: style || '' }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `AI 生成失败 (${res.status})`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('AI 响应超时，请重试');
+    throw err;
+  }
 }
