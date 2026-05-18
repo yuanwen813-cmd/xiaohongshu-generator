@@ -2,9 +2,9 @@
  * /api/generate — DeepSeek AI 文案生成代理
  *
  * 需要 Vercel 环境变量:
- *   deepseek-api-key
+ *   DEEPSEEK_API_KEY
  *   SUPABASE_URL
- *   supabase-service-role-key
+ *   SUPABASE_SERVICE_ROLE_KEY
  */
 
 const { createClient } = require('@supabase/supabase-js');
@@ -63,8 +63,8 @@ module.exports = async function handler(req, res) {
     }
 
     const supabase = createClient(
-      process.env.supabase-url,
-      process.env.supabase-service-role-key
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
     // 2. 验证用户身份
@@ -98,7 +98,7 @@ module.exports = async function handler(req, res) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.deepseek-api-key}`,
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
