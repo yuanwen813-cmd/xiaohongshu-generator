@@ -92,13 +92,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // ====== 风格选择按钮 ======
-  document.querySelectorAll('.style-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.style-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    });
-  });
 
   // ====== 输入框字数统计 ======
   inputKeyword.addEventListener('input', () => {
@@ -129,8 +122,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // 获取风格选择
-    const styleEl = document.querySelector('.style-btn.active');
-    const style = styleEl ? styleEl.dataset.style : '';
+    const styleSelect = document.getElementById('style-select');
+    const style = styleSelect ? styleSelect.value : '';
 
     // 进入加载状态
     setLoading(true);
